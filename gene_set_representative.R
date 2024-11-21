@@ -1,77 +1,113 @@
-# Charger les bibliothèques nécessaires
-if (!requireNamespace("readxl", quietly = TRUE)) {
-  install.packages("readxl")
-}
+# Charger les librairies nécessaires
 library(readxl)
+library(dplyr)
+library(writexl)  # Pour enregistrer dans un fichier Excel
+library(tidyr)    # Pour la fonction pivot_wider()
 
-# Charger les données du fichier Excel
-file_path <- "data/top_30_gene_sets.xlsx"  # Remplacez par le fichier voulu (top_N_gene_sets.xlsx)
-gene_sets <- read_excel(file_path)
-
-# Vérification rapide des colonnes
-cat("Colonnes disponibles :\n")
-print(colnames(gene_sets))
-
-# Extraire les gènes de chaque module
-gene_modules <- lapply(gene_sets$genes, function(genes_string) {
-  unlist(strsplit(genes_string, split = ","))  # Séparer les gènes par des virgules
-})
-
-# Nommer chaque module selon la colonne "annotation_id" ou "description"
-names(gene_modules) <- gene_sets$annotation_id
-
-# Matrice d'expression nettoyée après l'étape précédente
-expr_matrix <- exprs(data_clean)  # Matrice d'expression des gènes
-
-# Initialiser une liste pour stocker les représentants des modules
-module_representatives <- list()
-
-# Fonction pour calculer le t-statistique pour un module de gènes
-calculate_t_stat <- function(gene_indices, expr_matrix) {
-  # Sous-matrice des gènes du module
-  module_data <- expr_matrix[gene_indices, , drop = FALSE]
+# Fonction pour traiter chaque fichier et générer les résultats
+process_gene_sets <- function(gene_sets_file, sample_data_files, metastasis_info_file) {
   
-  # Taille du module (nombre de gènes)
-  n_genes <- nrow(module_data)
+  # Charger les modules de gènes
+  gene_sets <- read_excel(gene_sets_file)  # Fichier des modules de gènes
   
-  # Moyenne et écart-type pour chaque échantillon
-  mu <- colMeans(module_data)
-  sigma <- apply(module_data, 2, sd)
+  # Initialiser des listes pour stocker les résultats
+  t_stat_results <- data.frame(Sample = character(), Module = character(), t_stat = numeric(), stringsAsFactors = FALSE)
   
-  # Calcul du t-statistique pour chaque échantillon
-  t_stat <- (sqrt(n_genes) * mu) / sigma
-  return(t_stat)
-}
-
-# Calcul des représentants pour chaque module
-for (module_name in names(gene_modules)) {
-  cat("Processing module:", module_name, "\n")
-  
-  # Identifier les lignes correspondant aux gènes dans ce module
-  module_genes <- gene_modules[[module_name]]
-  gene_indices <- which(rownames(expr_matrix) %in% module_genes)
-  
-  # Vérifier si des gènes du module sont présents dans la matrice
-  if (length(gene_indices) == 0) {
-    cat("Aucun gène trouvé pour le module :", module_name, "\n")
-    next
+  # Parcourir les fichiers d'échantillons
+  for (sample_data_file in sample_data_files) {
+    
+    # Charger les données d'expression pour cet échantillon
+    sample_data <- read_excel(sample_data_file)  # Fichier avec les expressions des gènes
+    
+    # Extraire les colonnes d'échantillons (commencent par 'GSM')
+    sample_columns <- colnames(sample_data)[grepl("^GSM", colnames(sample_data))]
+    
+    # Parcourir chaque module dans gene_sets
+    for (module in unique(gene_sets$annotation_id)) {
+      
+      # Extraire les gènes pour le module
+      genes_in_module <- gene_sets %>%
+        filter(annotation_id == module) %>%
+        pull(genes) %>%
+        strsplit(", ") %>%
+        unlist()  # Liste des gènes dans le module
+      
+      # Vérifier que les gènes sont présents dans le fichier des échantillons
+      module_data <- sample_data %>%
+        filter(SYMBOL %in% genes_in_module) %>%
+        select(SYMBOL, all_of(sample_columns))  # Sélectionner les colonnes des échantillons
+      
+      # Si des gènes sont trouvés pour ce module
+      if (nrow(module_data) > 0) {
+        # Convertir les expressions des gènes en matrice (lignes = gènes, colonnes = échantillons)
+        expression_matrix <- module_data %>%
+          select(all_of(sample_columns)) %>%
+          as.matrix()
+        
+        # Calculer la moyenne et l'écart type pour chaque échantillon
+        mean_expr <- apply(expression_matrix, 2, mean, na.rm = TRUE)
+        sd_expr <- apply(expression_matrix, 2, sd, na.rm = TRUE)
+        n_genes <- nrow(expression_matrix)
+        
+        # Calculer la statistique t pour chaque échantillon
+        t_stat <- (sqrt(n_genes) * mean_expr) / sd_expr
+        
+        # Ajouter les résultats pour le module et l'échantillon dans t_stat_results
+        for (i in 1:length(t_stat)) {
+          t_stat_results <- rbind(t_stat_results, data.frame(
+            Sample = sample_columns[i],
+            Module = module,
+            t_stat = t_stat[i]
+          ))
+        }
+      }
+    }
   }
   
-  # Calculer les t-statistiques pour ce module
-  module_t_stat <- calculate_t_stat(gene_indices, expr_matrix)
+  # Trier les résultats par échantillon et t-statistique (ordre décroissant)
+  t_stat_results <- t_stat_results %>%
+    arrange(Sample, desc(t_stat))
   
-  # Stocker les t-statistiques dans la liste
-  module_representatives[[module_name]] <- module_t_stat
+  # Enregistrer les résultats des t-statistiques dans un fichier Excel
+  write_xlsx(t_stat_results, path = "data/output/t_stat_results.xlsx")
+  
+  # Créer le premier fichier avec les modules triés pour chaque échantillon
+  module_rankings <- t_stat_results %>%
+    group_by(Sample) %>%
+    mutate(Rank = rank(-t_stat, ties.method = "first")) %>%
+    ungroup() %>%
+    select(Sample, Rank, Module) %>%
+    pivot_wider(names_from = Rank, values_from = Module, names_prefix = "Rank_")
+  
+  # Charger les informations de métastasis
+  metastasis_info <- read_excel(metastasis_info_file)
+  
+  # Ajouter une colonne 'Risk' selon les critères donnés
+  metastasis_info$Risk <- ifelse(metastasis_info$e.dmfs == 1 & metastasis_info$t.dmfs <= 60, "High", "Low")
+  
+  # Joindre les informations 'Risk' à 'module_rankings'
+  module_rankings <- module_rankings %>%
+    left_join(metastasis_info %>%
+                select(geo_accn, Risk), by = c("Sample" = "geo_accn"))
+  
+  # Enregistrer les classements des modules dans un autre fichier Excel
+  write_xlsx(module_rankings, path = "data/output/module_rankings_with_risk.xlsx")
+  
+  message("Les résultats ont été enregistrés dans 'data/output/module_rankings_with_risk.xlsx' et 'data/output/t_stat_results.xlsx'.")
 }
 
-# Combiner les représentants des modules en une matrice
-module_representatives_matrix <- do.call(cbind, module_representatives)
+# Liste des fichiers d'échantillons à traiter
+sample_data_files <- list(
+  "data/output/GSE2034_cleaned_annotated.xlsx",
+  "data/output/GSE7390_cleaned_annotated.xlsx",
+  "data/output/GSE11121_cleaned_annotated.xlsx"
+)
 
-# Nommer les colonnes par les noms des modules
-colnames(module_representatives_matrix) <- names(module_representatives)
+# Nom du fichier des modules de gènes
+gene_sets_file <- "data/input/top_30_gene_sets.xlsx"
 
-# Résultat : Matrice où chaque colonne est un module et chaque ligne un échantillon
-cat("\nMatrice des représentants des modules :\n")
-print(module_representatives_matrix)
+# Nom du fichier d'informations sur les métastasis
+metastasis_info_file <- "data/input/metastasis_info.xlsx"
 
-# Cette matrice peut maintenant être utilisée comme entrée pour le modèle HMM
+# Appeler la fonction de traitement
+process_gene_sets(gene_sets_file, sample_data_files, metastasis_info_file)
