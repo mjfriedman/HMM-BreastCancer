@@ -3,18 +3,22 @@ rm(list = ls())
 # Clear the console
 cat("\014")
 
-
 ##### Load required libraries
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
 }
 
 # Install necessary Bioconductor packages
-BiocManager::install("affy")
-BiocManager::install("limma")
+required_packages <- c("affy", "limma", "hgu133a.db")
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    BiocManager::install(pkg)
+  }
+}
 
 library(affy)
 library(limma)
+library(hgu133a.db)
 
 # Define the list of dataset names and the main data directory
 dataset_names <- c("GSE2034", "GSE7390", "GSE11121")
@@ -35,15 +39,44 @@ normalize_and_transform <- function(data) {
   # Assign the transformed data back to the expression set
   exprs(data) <- transformed_data
   
-  return(data)  # Return the transformed data set
+  return(data)  # Return the transformed dataset
+}
+
+# Function to annotate probes
+annotate_probes <- function(data) {
+  # Get probeset IDs
+  probesets <- featureNames(data)
+  
+  # Map probesets to gene symbols using hgu133a.db (for HG-U133A)
+  gene_symbols <- mapIds(
+    hgu133a.db, 
+    keys = probesets, 
+    column = "SYMBOL", 
+    keytype = "PROBEID", 
+    multiVals = "first"
+  )
+  
+  # Replace missing annotations with the original probe IDs
+  gene_symbols[is.na(gene_symbols)] <- probesets[is.na(gene_symbols)]
+  
+  # Ensure unique feature names
+  featureNames(data) <- make.unique(gene_symbols)
+  
+  return(data)
 }
 
 # Loop to process each dataset
 for (dataset_name in dataset_names) {
   cat("\nProcessing dataset:", dataset_name, "\n")
   
-  # Load the CEL files
+  # Check if the dataset directory exists
   dataset_path <- file.path(data_dir, dataset_name)
+  if (!dir.exists(dataset_path)) {
+    cat("Dataset directory does not exist:", dataset_path, "\n")
+    next
+  }
+  
+  # Load the CEL files
   data <- ReadAffy(celfile.path = dataset_path)
   
   # Print initial sample count
@@ -53,28 +86,20 @@ for (dataset_name in dataset_names) {
   # STEP 1: Remove quality control probes (e.g., those containing "AFFX")
   control_probes <- grep("AFFX", featureNames(data))
   num_control_probes <- length(control_probes)
-  
-  # Print the number of control probes identified
   cat("Number of control probes identified:", num_control_probes, "\n")
   
-  # Remove control probes from the transformed data
+  # Remove control probes if found
   if (num_control_probes > 0) {
-    data_clean <- data[,-control_probes]
+    data_clean <- data[-control_probes, ]
   } else {
     data_clean <- data
   }
   
-  # STEP 2: Remove probes with variance values close to zero (1e-3)
-  # Calculate the variance for each probe across samples
+  # STEP 2: Remove probes with variance values close to zero
   variance_values <- apply(exprs(data_clean), 1, var)
-  
-  # Define a threshold for low variance (you can adjust the value)
   low_variance_threshold <- 1e-3  # Threshold for low variance
-  
-  # Identify probes with variance below the threshold
   low_variance_probes <- which(variance_values < low_variance_threshold)
   
-  # Remove the low variance probes
   if (length(low_variance_probes) > 0) {
     data_clean <- data_clean[-low_variance_probes, ]
     cat("Number of probes removed due to low variance:", length(low_variance_probes), "\n")
@@ -83,13 +108,9 @@ for (dataset_name in dataset_names) {
   }
   
   # STEP 3: Missing Value Handling (Remove probes with > 15% missing data)
-  # Calculate the proportion of missing data for each probe
   missing_data_proportion <- rowMeans(is.na(exprs(data_clean)))  # NA = missing values
-  
-  # Identify probes with more than 15% missing data
   probes_to_remove <- which(missing_data_proportion > 0.15)
   
-  # Remove the probes with too many missing values
   if (length(probes_to_remove) > 0) {
     data_clean <- data_clean[-probes_to_remove, ]
     cat("Number of probes removed due to missing data:", length(probes_to_remove), "\n")
@@ -100,9 +121,17 @@ for (dataset_name in dataset_names) {
   # STEP 4: Apply Log Transformation, Normalization, and Arctangent Transformation
   data_clean <- normalize_and_transform(data_clean)
   
+  # STEP 5: Annotate probes
+  data_clean <- annotate_probes(data_clean)
+  
   # Final sample count after cleaning
   final_sample_count <- dim(exprs(data_clean))[2]
   cat("Final number of samples after cleaning:", final_sample_count, "\n")
+  
+  # Save the cleaned and annotated data
+  save_file <- paste0(dataset_name, "_cleaned_annotated.RData")
+  save(data_clean, file = save_file)
+  cat("Saved cleaned data to:", save_file, "\n")
 }
 
 cat("\nAll datasets have been processed and analyzed.\n")
