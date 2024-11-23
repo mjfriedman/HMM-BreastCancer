@@ -1,8 +1,8 @@
 # Charger les librairies nécessaires
 library(readxl)
 library(dplyr)
-library(writexl)  # Pour enregistrer dans un fichier Excel
-library(tidyr)    # Pour la fonction pivot_wider()
+library(writexl)  
+library(tidyr)    
 
 # Fonction pour traiter chaque fichier et générer les résultats
 process_gene_sets <- function(gene_sets_file, sample_data_files, metastasis_info_file) {
@@ -35,13 +35,13 @@ process_gene_sets <- function(gene_sets_file, sample_data_files, metastasis_info
       # Vérifier que les gènes sont présents dans le fichier des échantillons
       module_data <- sample_data %>%
         filter(SYMBOL %in% genes_in_module) %>%
-        select(SYMBOL, all_of(sample_columns))  # Sélectionner les colonnes des échantillons
+        dplyr::select(SYMBOL, all_of(sample_columns))  # Sélectionner les colonnes des échantillons
       
       # Si des gènes sont trouvés pour ce module
       if (nrow(module_data) > 0) {
         # Convertir les expressions des gènes en matrice (lignes = gènes, colonnes = échantillons)
         expression_matrix <- module_data %>%
-          select(all_of(sample_columns)) %>%
+          dplyr::select(all_of(sample_columns)) %>%
           as.matrix()
         
         # Calculer la moyenne et l'écart type pour chaque échantillon
