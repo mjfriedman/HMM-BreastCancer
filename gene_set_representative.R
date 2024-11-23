@@ -76,7 +76,7 @@ process_gene_sets <- function(gene_sets_file, sample_data_files, metastasis_info
     group_by(Sample) %>%
     mutate(Rank = rank(-t_stat, ties.method = "first")) %>%
     ungroup() %>%
-    select(Sample, Rank, Module) %>%
+    dplyr::select(Sample, Rank, Module) %>%
     pivot_wider(names_from = Rank, values_from = Module, names_prefix = "Rank_")
   
   # Charger les informations de métastasis
@@ -88,7 +88,7 @@ process_gene_sets <- function(gene_sets_file, sample_data_files, metastasis_info
   # Joindre les informations 'Risk' à 'module_rankings'
   module_rankings <- module_rankings %>%
     left_join(metastasis_info %>%
-                select(geo_accn, Risk), by = c("Sample" = "geo_accn"))
+                dplyr::select(geo_accn, Risk), by = c("Sample" = "geo_accn"))
   
   # Enregistrer les classements des modules dans un autre fichier Excel
   write_xlsx(module_rankings, path = "data/output/module_rankings_with_risk.xlsx")
