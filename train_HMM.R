@@ -104,7 +104,7 @@ initialize_hmm <- function(train_data, modules) {
 
 
 # Trainer
-trainer <- function(hmm, data, maxIterations = 10) {
+trainer <- function(hmm, data, maxIterations = 300) {
   log_likelihoods <- numeric()
   
   start_time <- Sys.time()
@@ -136,7 +136,7 @@ trainer <- function(hmm, data, maxIterations = 10) {
 cat("\n\nTraining HMM : High risk")
 hmm_high <- initialize_hmm(train_high, modules)
 train_start_time <- Sys.time()
-bw_high <- trainer(hmm_high, train_high_seq, maxIterations = 10)
+bw_high <- trainer(hmm_high, train_high_seq, maxIterations = 300)
 # Accéder aux matrices nécessaires pour l'algorithme Forward
 A_high <- bw_high$A
 B_high <- bw_high$B
@@ -150,7 +150,7 @@ cat("Temps total d'entrainement:", delta_time, "seconds\n")
 cat("\n\nTraining HMM : Low risk")
 hmm_low <- initialize_hmm(train_low, modules)
 train_start_time <- Sys.time()
-bw_low <- trainer(hmm_low, train_low_seq, maxIterations = 10)
+bw_low <- trainer(hmm_low, train_low_seq, maxIterations = 700)
 # Accéder aux matrices
 A_low <- bw_low$A
 B_low <- bw_low$B
@@ -163,7 +163,7 @@ cat("Temps total d'entrainement:", delta_time, "seconds\n")
 # Plot des log-vraisemblances
 plot(log_likelihoods_high, type = "o", col = "blue", xlab = "Itération", ylab = "Log vraisemblance", main = "Log vraisemblance par Itération")
 lines(log_likelihoods_low, type = "o", col = "red")
-legend("bottomright", legend = c("Haut Risque", "Faible Risque"), col = c("blue", "red"), lty = 1)
+legend("topright", legend = c("Haut Risque", "Faible Risque"), col = c("blue", "red"), lty = 1)
 
 # Fonction pour l'algorithme Forward
 forward_algorithm <- function(sequence, A, B, pi) {
@@ -226,77 +226,47 @@ evaluate_test_samples <- function(test_data, A_high, B_high, pi_high, A_low, B_l
   
   return(predictions)
 }
-# Initialiser les listes pour stocker les résultats des métriques
-sensitivity_results <- c()
-specificity_results <- c()
-mcc_results <- c()
-f1_results <- c()
 
 # Appliquer l'évaluation
-k <- 10 # Nombre d'itérations pour l'évaluation
-for (i in 1:k) {
-  cat("\nÉvaluation, i, des données de test...\n")
-  predictions <- evaluate_test_samples(test_data, A_high, B_high, pi_high, A_low, B_low, pi_low)
-  
-  # Créer une matrice de confusion
-  confusion_matrix <- table(Predicted = predictions, Actual = test_data$Risk)
-  #print("Matrice de confusion :")
-  #print(confusion_matrix)
-  
-  # Calcul des métriques : Sensibilité, Spécificité, MCC, F1-Score
-  true_positive <- confusion_matrix["High", "High"]
-  false_negative <- confusion_matrix["Low", "High"]
-  true_negative <- confusion_matrix["Low", "Low"]
-  false_positive <- confusion_matrix["High", "Low"]
-  
-  # Sensibilité (TPR)
-  sensitivity <- ifelse((true_positive + false_negative) > 0, 
-                        true_positive / (true_positive + false_negative), 
-                        NA)
-  
-  # Spécificité (TNR)
-  specificity <- ifelse((true_negative + false_positive) > 0, 
-                        true_negative / (true_negative + false_positive), 
-                        NA)
-  
-  # MCC (Matthew's Correlation Coefficient)
-  numerator <- (true_positive * true_negative) - (false_positive * false_negative)
-  denominator <- sqrt((true_positive + false_positive) * 
-                        (true_positive + false_negative) * 
-                        (true_negative + false_positive) * 
-                        (true_negative + false_negative))
-  
-  mcc <- ifelse(denominator > 0, numerator / denominator, NA)
-  
-  # F1-Score
-  f1 <- F1_Score(predictions, test_data$Risk, positive = "High")
-  
-  # Ajouter les métriques aux listes correspondantes
-  sensitivity_results <- c(sensitivity_results, sensitivity)
-  specificity_results <- c(specificity_results, specificity)
-  mcc_results <- c(mcc_results, mcc)
-  f1_results <- c(f1_results, f1)
-}
+cat("\nÉvaluation des données de test...\n")
+predictions <- evaluate_test_samples(test_data, A_high, B_high, pi_high, A_low, B_low, pi_low)
+
+# Créer une matrice de confusion
+confusion_matrix <- table(Predicted = predictions, Actual = test_data$Risk)
+print("Matrice de confusion :")
+print(confusion_matrix)
+
+# Calcul des métriques : Sensibilité, Spécificité, MCC, F1-Score
+true_positive <- confusion_matrix["High", "High"]
+false_negative <- confusion_matrix["Low", "High"]
+true_negative <- confusion_matrix["Low", "Low"]
+false_positive <- confusion_matrix["High", "Low"]
+
+# Sensibilité (TPR)
+sensitivity <- ifelse((true_positive + false_negative) > 0, 
+                      true_positive / (true_positive + false_negative), 
+                      NA)
+
+# Spécificité (TNR)
+specificity <- ifelse((true_negative + false_positive) > 0, 
+                      true_negative / (true_negative + false_positive), 
+                      NA)
+
+# MCC (Matthew's Correlation Coefficient)
+numerator <- (true_positive * true_negative) - (false_positive * false_negative)
+denominator <- sqrt((true_positive + false_positive) * 
+                      (true_positive + false_negative) * 
+                      (true_negative + false_positive) * 
+                      (true_negative + false_negative))
+
+mcc <- ifelse(denominator > 0, numerator / denominator, NA)
+
+# F1-Score
+f1 <- F1_Score(predictions, test_data$Risk, positive = "High")
 
 # Afficher les résultats
 cat("\nRésultats de l'évaluation :\n")
-
-# Calculer les moyennes et écarts-types
-mean_sensitivity <- mean(sensitivity_results, na.rm = TRUE)
-std_sensitivity <- sd(sensitivity_results, na.rm = TRUE)
-
-mean_specificity <- mean(specificity_results, na.rm = TRUE)
-std_specificity <- sd(specificity_results, na.rm = TRUE)
-
-mean_mcc <- mean(mcc_results, na.rm = TRUE)
-std_mcc <- sd(mcc_results, na.rm = TRUE)
-
-mean_f1 <- mean(f1_results, na.rm = TRUE)
-std_f1 <- sd(f1_results, na.rm = TRUE)
-
-# Afficher les résultats finaux
-cat("\nRésultats moyens (± écart-type) sur", k, "itérations :\n")
-cat("Sensibilité (TPR) :", round(mean_sensitivity, 4), "±", round(std_sensitivity, 4), "\n")
-cat("Spécificité (TNR) :", round(mean_specificity, 4), "±", round(std_specificity, 4), "\n")
-cat("MCC :", round(mean_mcc, 4), "±", round(std_mcc, 4), "\n")
-cat("F1-Score :", round(mean_f1, 4), "±", round(std_f1, 4), "\n")
+cat("Sensibilité (TPR) :", round(sensitivity, 4), "\n")
+cat("Spécificité (TNR) :", round(specificity, 4), "\n")
+cat("MCC :", round(mcc, 4), "\n")
+cat("F1-Score :", round(f1, 4), "\n")
