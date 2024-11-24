@@ -13,10 +13,10 @@ L'objectif général de projet est d’implémenter et d’évaluer un algorithm
 
 - **Scripts :**  
   Les scripts doivent être exécutés dans l'ordre suivant :  
-  1. `clean_data.R` : Nettoyage des données d'expression génétique et préparation pour l'analyse.  
-  2. `gene_set_selection.R` : Sélection des modules de gènes pertinents basés sur des critères statistiques et biologiques.  
-  3. `gene_set_representative.R` : Détermination des représentants de module de gènes.
-  4. `train_HMM.R` : Entraînement et évaluation des modèles de Markov cachés à partir des séquences génétiques nettoyées et sélectionnées.  
+  `clean_data.R` : Nettoyage des données d'expression génétique et préparation pour l'analyse.  
+  `gene_set_selection.R` : Sélection des modules de gènes pertinents basés sur des critères statistiques et biologiques.  
+  `gene_set_representative.R` : Détermination des représentants de module de gènes.
+  `train_HMM.R` : Entraînement et évaluation des modèles de Markov cachés à partir des séquences génétiques nettoyées et sélectionnées.  
 
 - **Dossier `data/` :**  
   Ce dossier contient les données nécessaires pour exécuter les scripts. Notez que, pour des raisons de confidentialité et de taille, ce dépôt GitHub ne contient pas l'ensemble complet des données. Veuillez télécharger les fichiers de données à partir du lien fourni ci-dessous.
@@ -26,7 +26,7 @@ L'objectif général de projet est d’implémenter et d’évaluer un algorithm
 ## Données
 
 Pour télécharger les données complètes nécessaires au projet, utilisez le lien suivant :  
-[**Télécharger les données**](https://example.com/dataset-link)  
+[**Télécharger les données**](https://drive.google.com/drive/folders/1y0zpIOVX_JyP4txjIAnxw2NBD83u3PlL?usp=drive_link)  
 
 Une fois téléchargées, placez le contenu (garder le nom des repertoires) dans le dossier `data/` à la racine du projet.
 
