@@ -104,7 +104,7 @@ initialize_hmm <- function(train_data, modules) {
 
 
 # Trainer
-trainer <- function(hmm, data, maxIterations = 300) {
+trainer <- function(hmm, data, maxIterations = 15) {
   log_likelihoods <- numeric()
   
   start_time <- Sys.time()
@@ -136,7 +136,7 @@ trainer <- function(hmm, data, maxIterations = 300) {
 cat("\n\nTraining HMM : High risk")
 hmm_high <- initialize_hmm(train_high, modules)
 train_start_time <- Sys.time()
-bw_high <- trainer(hmm_high, train_high_seq, maxIterations = 300)
+bw_high <- trainer(hmm_high, train_high_seq, maxIterations = 20)
 # Accéder aux matrices nécessaires pour l'algorithme Forward
 A_high <- bw_high$A
 B_high <- bw_high$B
@@ -150,7 +150,7 @@ cat("Temps total d'entrainement:", delta_time, "seconds\n")
 cat("\n\nTraining HMM : Low risk")
 hmm_low <- initialize_hmm(train_low, modules)
 train_start_time <- Sys.time()
-bw_low <- trainer(hmm_low, train_low_seq, maxIterations = 700)
+bw_low <- trainer(hmm_low, train_low_seq, maxIterations = 15)
 # Accéder aux matrices
 A_low <- bw_low$A
 B_low <- bw_low$B
@@ -160,10 +160,11 @@ train_end_time <- Sys.time()
 delta_time <- as.numeric(difftime(train_end_time, train_start_time, units = "secs"))
 cat("Temps total d'entrainement:", delta_time, "seconds\n")
 
-# Plot des log-vraisemblances
-plot(log_likelihoods_high, type = "o", col = "blue", xlab = "Itération", ylab = "Log vraisemblance", main = "Log vraisemblance par Itération")
+# Plot des différence de log-vraisemblances
+plot(log_likelihoods_high, type = "o", col = "blue", xlab = "Itération", ylab = "Diff de log vraisemblance", main = " N = 25 modules")
 lines(log_likelihoods_low, type = "o", col = "red")
-legend("topright", legend = c("Haut Risque", "Faible Risque"), col = c("blue", "red"), lty = 1)
+legend("topright", legend = c("Haut Risque", "Faible Risque"), col = c("blue", "red"), lty = 1, 
+       cex = 0.7)
 
 # Fonction pour l'algorithme Forward
 forward_algorithm <- function(sequence, A, B, pi) {
@@ -210,15 +211,12 @@ evaluate_test_samples <- function(test_data, A_high, B_high, pi_high, A_low, B_l
 
   for (i in 1:nrow(test_data)) {
     # Extraire une séquence
-    cat("sample =", i, "\n")
     sample <- as.character(unlist(test_data[i, rank_columns]))  # Extraire comme vecteur de caractères
-    cat("sample : ", sample, "\n")
-    
+
     # Calculer les log-vraisemblances pour les deux modèles
     log_prob_high <- forward_algorithm(sample, A_high, B_high, pi_high)
     log_prob_low <- forward_algorithm(sample, A_low, B_low, pi_low)
-    cat(" log_prob high =", log_prob_high, "and log_prob low=", log_prob_low, "\n")
-    
+
     # Prédiction basée sur les log-vraisemblances
     predicted_label <- ifelse(log_prob_high > log_prob_low, "High", "Low")
     predictions <- c(predictions, predicted_label)
@@ -260,6 +258,7 @@ denominator <- sqrt((true_positive + false_positive) *
                       (true_negative + false_negative))
 
 mcc <- ifelse(denominator > 0, numerator / denominator, NA)
+
 
 # F1-Score
 f1 <- F1_Score(predictions, test_data$Risk, positive = "High")
